@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script type="application/zfl-manifest">
+{
+ "zfl": 1,
+ "id": "labs.zfl.sudoku",
+ "name": "Sudoku",
+ "version": "1.1",
+ "icon": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20x%3D%2240%22%20y%3D%2240%22%20width%3D%22432%22%20height%3D%22432%22%20rx%3D%2296%22%20fill%3D%22%232b6cb0%22/%3E%3Ctext%20x%3D%22256%22%20y%3D%22340%22%20font-family%3D%22sans-serif%22%20font-size%3D%22260%22%20font-weight%3D%22700%22%20text-anchor%3D%22middle%22%20fill%3D%22%23fff%22%3E9%3C/text%3E%3C/svg%3E",
+ "permissions": [
+  "camera",
+  "storage",
+  "overlay",
+  "screenshot",
+  "share"
+ ]
+}
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sudoku Solver</title>
+<style>
+  :root{--bg:#fafafa;--fg:#111;--line:#999;--thick:#222;--sel:#cfe3ff;--bad:#ffb3b3;--solved:#1a5fd0;--btn:#2b2b2b}
+  @media (prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--line:#555;--thick:#ddd;--sel:#26456e;--bad:#7a2a2a;--solved:#6aa6ff;--btn:#444}}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px}
+  h1{font-size:18px;margin:4px 0 10px}
+  #board{display:grid;grid-template-columns:repeat(9,1fr);width:min(94vw,420px);aspect-ratio:1;border:3px solid var(--thick);user-select:none;touch-action:manipulation}
+  .c{display:flex;align-items:center;justify-content:center;font-size:min(6.2vw,26px);font-weight:700;border:1px solid var(--line);cursor:pointer}
+  .c:nth-child(3n){border-right:3px solid var(--thick)}
+  .c:nth-child(9n){border-right:1px solid var(--line)}
+  .c:nth-child(n+19):nth-child(-n+27),.c:nth-child(n+46):nth-child(-n+54){border-bottom:3px solid var(--thick)}
+  .c.s{background:var(--sel)}
+  .kitem{display:inline-flex;flex-direction:column;align-items:center;gap:4px;margin:4px;padding:6px;border:1px solid var(--line);border-radius:8px}
+  .kitem canvas{background:#fff;image-rendering:pixelated}
+  #fw{position:fixed;right:10px;bottom:10px;width:156px;background:var(--bg);color:var(--fg);border:2px solid var(--thick);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.45);z-index:1000;display:none;touch-action:none;font-size:12px}
+  #fw.big{width:min(92vw,330px)}
+  body.floatmode>*:not(#fw):not(#fnote):not(#sendbar):not(script){display:none!important}
+  body.floatmode #fw{display:block!important;position:static;width:min(94vw,420px);margin:6px auto 0}
+  body.floatmode #fwsize{display:none}
+  #fnote{display:none;width:min(94vw,420px);font-size:14px;margin:6px 0}
+  body.floatmode #fnote{display:block}
+  #fw.pip{position:static;width:100%;box-shadow:none;border:0;border-radius:0}
+  #fwh{display:flex;align-items:center;justify-content:space-between;padding:2px 6px;cursor:grab;user-select:none;background:var(--btn);color:#fff;border-radius:8px 8px 0 0}
+  #fwh button{background:none;border:0;color:#fff;font-size:15px;padding:2px 6px;cursor:pointer;border-radius:4px}
+  #fwg{display:grid;grid-template-columns:repeat(9,1fr);aspect-ratio:1;container-type:inline-size}
+  #fwg .w{display:flex;align-items:center;justify-content:center;font-size:6cqw;font-weight:700;border:1px solid var(--line)}
+  #fwg .w:nth-child(3n){border-right:2px solid var(--thick)}
+  #fwg .w:nth-child(9n){border-right:1px solid var(--line)}
+  #fwg .w:nth-child(n+19):nth-child(-n+27),#fwg .w:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid var(--thick)}
+  #fwg .w.auto{color:var(--solved);font-weight:500}
+  .c.unsure{background:#ffd54a;color:#000}
+  .c.bad{background:var(--bad)}
+  .c.auto{color:var(--solved);font-weight:500}
+  #pad{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;width:min(94vw,420px);margin-top:10px}
+  button,label.b{background:var(--btn);color:#fff;border:0;border-radius:8px;padding:12px 0;font-size:18px;text-align:center;cursor:pointer}
+  #pad button{font-size:22px}
+  #acts{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;width:min(94vw,420px);margin-top:8px}
+  #acts .go,#camwrap .go{background:#1a5fd0;font-weight:700}
+  #acts button,#acts label.b{font-size:14px;padding:12px 2px}
+  #msg{margin:10px 0;min-height:1.4em;width:min(94vw,420px);font-size:14px}
+  #scan{display:none;width:min(94vw,420px);margin-top:6px}
+  #cv{width:100%;touch-action:none;border:1px solid var(--line)}
+  small{opacity:.7}
+</style>
+</head>
+<body>
+<h1>Sudoku Solver</h1>
+<div id="board"></div>
+<div id="msg">Tap a cell, then a number. Or load an image, or use the camera.</div>
+<div id="pad"></div>
+<div id="acts">
+  <button class="go" id="solve">Solve</button>
+  <label class="b">Load image<input id="file" type="file" accept="image/*" hidden></label>
+  <button id="cam">Camera</button>
+  <button id="scr">Screenshot</button>
+  <button id="clear">Clear</button>
+</div>
+<button id="setbtn" style="width:min(94vw,420px);margin-top:8px;background:transparent;color:var(--fg);border:1px solid var(--line);font-size:14px;padding:8px">&#9881; Settings</button>
+<div id="settings" style="display:none;width:min(94vw,420px);margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;line-height:1.4">
+  <label><input type="checkbox" id="optFloat"> <b>Floating solution</b><br><small>When solved, show the answer in a small draggable widget that stays on top. On desktop Chrome or Edge it also tries to pop out above your other apps.</small></label>
+  <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
+  <label><input type="checkbox" id="optSend"> <b>Auto-send solution</b><br><small>When solved, open your phone's share sheet with the solution as a picture. Pick Messages, Gmail or any app and the people. A browser cannot send silently or pick the recipients for you. The list below is used by the Email and Text buttons, which send the solution as plain text.</small></label>
+  <textarea id="sendTo" rows="3" placeholder="One per line: emails and/or phone numbers" style="width:100%;margin-top:8px;font-size:14px;padding:6px"></textarea>
+  <small id="sendInfo"></small>
+</div>
+<div id="sendbar" style="display:none;width:min(94vw,420px);margin-top:8px;grid-template-columns:1fr 1fr;gap:6px">
+  <button id="sendShare" style="font-size:15px;padding:10px 2px;grid-column:1/-1">Share picture</button>
+  <button id="sendMail" style="font-size:15px;padding:10px 2px">Email the solution</button>
+  <button id="sendSms" style="font-size:15px;padding:10px 2px">Text the solution</button>
+</div>
+<input id="camfile" type="file" accept="image/*" capture="environment" hidden>
+<div id="camwrap" style="display:none;width:min(94vw,420px);margin-top:8px">
+  <video id="vid" playsinline autoplay muted style="width:100%;background:#000;border-radius:8px"></video>
+  <p id="camhint"><small>Point the camera straight down at the puzzle so the whole grid is in view. It reads it by itself.</small></p>
+  <button id="camcancel" style="width:100%">Cancel</button>
+</div>
+<div id="fnote"><b>Solved and verified.</b> Showing only the solution. Press &#x2715; on it to go back to the solver.</div>
+<div id="fw">
+  <div id="fwh"><span>Solution</span><span><button id="fwsize" title="Bigger / smaller">&#x2922;</button><button id="fwpop" title="Float over other apps" style="display:none">Float &#x29C9;</button><button id="fwx" title="Close">&#x2715;</button></span></div>
+  <div id="fwg"></div>
+</div>
+<div id="scan">
+  <p><small>Load an image: it finds the grid, reads the digits and solves. If it cannot find the grid, drag a box around it and press Find digits. Works offline. If it meets a digit style it has not seen, it asks you to confirm just that shape once and remembers it.</small></p>
+  <canvas id="cv"></canvas>
+  <button id="doscan" style="width:100%;margin-top:6px">Find digits</button>
+  <div id="key"></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let vals=Array(81).fill(0), auto=Array(81).fill(false), sel=0, bad=new Set(), unsure=new Set();
+
+//SOLVER-START
+const boxOf=i=>((i/27|0)*3)+((i%9)/3|0);
+function conflicts(g){
+  const bad=new Set();
+  const units=[];
+  for(let r=0;r<9;r++){units.push([...Array(9)].map((_,c)=>r*9+c));}
+  for(let c=0;c<9;c++){units.push([...Array(9)].map((_,r)=>r*9+c));}
+  for(let b=0;b<9;b++){const u=[];for(let i=0;i<81;i++)if(boxOf(i)===b)u.push(i);units.push(u);}
+  for(const u of units){const seen={};for(const i of u){const v=g[i];if(!v)continue;if(seen[v]!==undefined){bad.add(i);bad.add(seen[v]);}seen[v]=i;}}
+  return bad;
+}
+function solveAll(grid,limit){
+  let count=0,first=null;
+  const g=grid.slice(), rows=Array(9).fill(0), cols=Array(9).fill(0), boxes=Array(9).fill(0);
+  for(let i=0;i<81;i++){const v=g[i];if(v){const b=1<<v,r=i/9|0,c=i%9,x=boxOf(i);
+    if((rows[r]|cols[c]|boxes[x])&b)return {first:null,count:0};rows[r]|=b;cols[c]|=b;boxes[x]|=b;}}
+  const empt=[];for(let i=0;i<81;i++)if(!g[i])empt.push(i);
+  const pop=m=>{let n=0;while(m){m&=m-1;n++;}return n;};
+  function rec(){
+    if(!empt.length){count++;if(!first)first=g.slice();return count>=limit;}
+    let best=-1,bm=0,bn=10;
+    for(let k=0;k<empt.length;k++){const i=empt[k];
+      const m=~(rows[i/9|0]|cols[i%9]|boxes[boxOf(i)])&0x3FE, n=pop(m);
+      if(n<bn){best=k;bm=m;bn=n;if(n<=1)break;}}
+    if(bn===0)return false;
+    const i=empt.splice(best,1)[0], r=i/9|0,c=i%9,x=boxOf(i);
+    let m=bm;
+    while(m){const b=m&-m;m^=b;
+      rows[r]|=b;cols[c]|=b;boxes[x]|=b;g[i]=31-Math.clz32(b);
+      if(rec())return true;
+      rows[r]^=b;cols[c]^=b;boxes[x]^=b;}
+    g[i]=0;empt.splice(best,0,i);return false;
+  }
+  rec();
+  return {first,count};
+}
+const solve=g=>solveAll(g,1).first;
+// Independent check: every row/column/box holds 1-9 exactly once, and all givens are unchanged.
+function verify(sol,givens){
+  if(!sol||sol.length!==81)return false;
+  for(let i=0;i<81;i++){if(givens[i]&&givens[i]!==sol[i])return false;if(!(sol[i]>=1&&sol[i]<=9))return false;}
+  for(let k=0;k<9;k++){let r=0,c=0,b=0;
+    for(let j=0;j<9;j++){r|=1<<sol[k*9+j];c|=1<<sol[j*9+k];
+      b|=1<<sol[((k/3|0)*3+(j/3|0))*9+(k%3)*3+(j%3)];}
+    if(r!==0x3FE||c!==0x3FE||b!==0x3FE)return false;}
+  return true;
+}
+//SOLVER-END
+
+// ---------- UI ----------
+const board=$('#board');
+for(let i=0;i<81;i++){const d=document.createElement('div');d.className='c';d.onclick=()=>{sel=i;render();};board.appendChild(d);}
+for(let n=1;n<=9;n++){const b=document.createElement('button');b.textContent=n;b.onclick=()=>setVal(n);$('#pad').appendChild(b);}
+const er=document.createElement('button');er.textContent='⌫';er.onclick=()=>setVal(0);$('#pad').appendChild(er);
+
+function render(){
+  [...board.children].forEach((d,i)=>{
+    d.textContent=vals[i]||'';
+    d.className='c'+(i===sel?' s':'')+(unsure.has(i)?' unsure':'')+(bad.has(i)?' bad':'')+(auto[i]?' auto':'');
+  });
+}
+function msg(t){$('#msg').textContent=t;}
+function setVal(v){vals[sel]=v;auto[sel]=false;bad=new Set();unsure.delete(sel);if(v&&sel<80)sel++;render();}
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9')setVal(+e.key);
+  else if(e.key==='0'||e.key==='Delete'||e.key==='Backspace'){vals[sel]=0;auto[sel]=false;bad=new Set();unsure.delete(sel);render();}
+  else if(e.key==='ArrowRight')sel=(sel+1)%81;
+  else if(e.key==='ArrowLeft')sel=(sel+80)%81;
+  else if(e.key==='ArrowDown')sel=(sel+9)%81;
+  else if(e.key==='ArrowUp')sel=(sel+72)%81;
+  else if(e.key==='Enter')$('#solve').click();
+  else return;
+  render();
+});
+$('#solve').onclick=()=>{
+  const givens=vals.map((v,i)=>auto[i]?0:v);
+  bad=conflicts(givens);
+  if(bad.size){render();msg('Red cells conflict. Fix them (scan misread?) and solve again.');return;}
+  const res=solveAll(givens,2);
+  if(res.count===0){msg('No solution exists for this grid. A digit is probably wrong or misread. Check the entries.');return;}
+  if(res.count>1){msg('This grid has MORE THAN ONE solution, so a valid puzzle is not entered. Digits are probably missing or misread. Nothing was filled in.');return;}
+  const s=res.first;
+  if(!verify(s,givens)){msg('Internal check failed. Do not use this result.');return;}
+  vals=s;auto=givens.map(v=>!v);unsure=new Set();render();
+  msg('Solved and verified: unique solution, every row, column and box has 1-9, your digits unchanged. Blue = filled in.');
+  afterSolve(s,givens);
+};
+$('#clear').onclick=()=>{vals.fill(0);auto.fill(false);bad=new Set();unsure=new Set();sel=0;$('#scan').style.display='none';fw.style.display='none';stopCam();render();msg('Cleared.');};
+
+
+// ---------- Floating solution widget ----------
+const fw=$('#fw'),fwg=$('#fwg');
+for(let i=0;i<81;i++){const d=document.createElement('div');d.className='w';fwg.appendChild(d);}
+function showWidget(){[...fwg.children].forEach((d,i)=>{d.textContent=vals[i]||'';d.className='w'+(auto[i]?' auto':'');});fw.style.display='block';}
+let fdrag=null;
+$('#fwh').onpointerdown=e=>{if(e.target.tagName==='BUTTON'||fw.classList.contains('pip')||document.body.classList.contains('floatmode'))return;
+  const r=fw.getBoundingClientRect();fdrag={dx:e.clientX-r.left,dy:e.clientY-r.top};e.currentTarget.setPointerCapture(e.pointerId);};
+$('#fwh').onpointermove=e=>{if(!fdrag)return;
+  fw.style.left=Math.max(0,Math.min(innerWidth-fw.offsetWidth,e.clientX-fdrag.dx))+'px';
+  fw.style.top=Math.max(0,Math.min(innerHeight-fw.offsetHeight,e.clientY-fdrag.dy))+'px';
+  fw.style.right='auto';fw.style.bottom='auto';};
+$('#fwh').onpointerup=()=>{fdrag=null;};
+$('#fwsize').onclick=()=>fw.classList.toggle('big');
+function exitFloat(){   // back to the standard solver screen
+  document.body.classList.remove('floatmode');
+  fw.style.display='none';
+  if(fw.classList.contains('pip')){try{fw.ownerDocument.defaultView.close();}catch(e){}}
+  if(typeof vp!=='undefined'&&vp){try{document.exitPictureInPicture().catch(()=>{});}catch(e){}}
+}
+$('#fwx').onclick=exitFloat;
+// Video picture-in-picture: the only way a web page can float over OTHER apps on Android Chrome.
+// The solution is drawn on a canvas, streamed into a hidden video, and that video goes into PiP.
+const vpOK=!!(document.pictureInPictureEnabled&&HTMLVideoElement.prototype.requestPictureInPicture&&HTMLCanvasElement.prototype.captureStream);
+let vp=null;
+function paintSolution(c,V,A){   // the solution as a picture: your digits black, filled-in digits blue
+  const x=c.getContext('2d'),n=c.width,u=n/9;
+  x.fillStyle='#fff';x.fillRect(0,0,n,n);
+  x.textAlign='center';x.textBaseline='middle';x.font='bold '+Math.round(u*0.62)+'px system-ui,sans-serif';
+  for(let i=0;i<81;i++){const v=V[i];if(!v)continue;x.fillStyle=A[i]?'#1a5fd0':'#111';x.fillText(v,(i%9+0.5)*u,(Math.floor(i/9)+0.5)*u+u*0.04);}
+  for(let k=0;k<=9;k++){x.fillStyle='#222';const w=k%3===0?Math.max(3,n/90):Math.max(1,n/300);x.fillRect(k*u-w/2,0,w,n);x.fillRect(0,k*u-w/2,n,w);}
+}
+function drawVp(){if(vp)paintSolution(vp.cv,vals,auto);}
+async function vpStart(){
+  const cv=document.createElement('canvas');cv.width=cv.height=450;
+  const v=document.createElement('video');v.muted=true;v.playsInline=true;v.setAttribute('playsinline','');
+  v.style.cssText='position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:0;top:0';document.body.appendChild(v);
+  const me={cv,v,t:null};vp=me;drawVp();
+  v.srcObject=cv.captureStream(5);
+  me.t=setInterval(drawVp,400);
+  const end=()=>{clearInterval(me.t);try{v.srcObject.getTracks().forEach(t=>t.stop());}catch(e){}v.remove();if(vp===me)vp=null;};
+  v.addEventListener('leavepictureinpicture',()=>{end();exitFloat();});
+  try{await v.play();await v.requestPictureInPicture();}catch(e){end();throw e;}
+}
+if('documentPictureInPicture' in window||vpOK)$('#fwpop').style.display='inline';
+$('#fwpop').onclick=async()=>{
+  if(vp){try{await document.exitPictureInPicture();}catch(e){}return;}
+  if('documentPictureInPicture' in window){   // desktop Chrome/Edge: a live always-on-top window
+    try{
+      const pw=await documentPictureInPicture.requestWindow({width:280,height:310});
+      [...document.styleSheets].forEach(ss=>{try{const st=pw.document.createElement('style');st.textContent=[...ss.cssRules].map(r=>r.cssText).join('\n');pw.document.head.appendChild(st);}catch(e){}});
+      pw.document.body.style.cssText='margin:0;background:'+getComputedStyle(document.body).backgroundColor;
+      fw.classList.add('pip');pw.document.body.appendChild(fw);
+      pw.addEventListener('pagehide',()=>{fw.classList.remove('pip');document.body.appendChild(fw);exitFloat();});
+      return;
+    }catch(e){}
+  }
+  if(vpOK){
+    try{await vpStart();return;}catch(e){}
+  }
+  msg('Floating over other apps is not available in this browser. The solution stays on this page.');
+};
+
+
+// ---------- Settings, floating solution, auto-send ----------
+const SET_KEY='zfl_sudoku_settings_v1';
+let settings={float:true,send:false,to:''}, lastSent='', lastSol=null;
+try{Object.assign(settings,JSON.parse(localStorage.getItem(SET_KEY)||'{}'));}catch(e){}
+function saveSettings(){try{localStorage.setItem(SET_KEY,JSON.stringify(settings));}catch(e){}}
+function parseTo(){
+  const emails=[],phones=[];
+  for(const raw of settings.to.split(/[\n,;]+/)){
+    const t=raw.trim();if(!t)continue;
+    if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t))emails.push(t);
+    else if(/^\+?[\d\s().-]{7,}$/.test(t))phones.push(t.replace(/[\s().-]/g,''));
+  }
+  return {emails,phones};
+}
+function refreshSettingsUI(){
+  const {emails,phones}=parseTo();
+  $('#sendInfo').textContent=(emails.length||phones.length)?`List: ${emails.length} email${emails.length===1?'':'s'}, ${phones.length} phone number${phones.length===1?'':'s'}.`:'List is empty.';
+  const bar=$('#sendbar');
+  $('#sendMail').style.display=emails.length?'':'none';$('#sendSms').style.display=phones.length?'':'none';
+  $('#sendShare').style.display=settings.send?'':'none';
+  bar.style.display=(lastSol&&(settings.send||emails.length||phones.length))?'grid':'none';
+  bar.style.gridTemplateColumns=(emails.length&&phones.length)?'1fr 1fr':'1fr';
+}
+$('#optFloat').checked=settings.float;$('#optSend').checked=settings.send;
+$('#sendTo').value=settings.to;
+$('#setbtn').onclick=()=>{const e=$('#settings');e.style.display=e.style.display==='none'?'block':'none';};
+$('#optFloat').onchange=e=>{settings.float=e.target.checked;saveSettings();
+  if(!settings.float)fw.style.display='none';else if(lastSol)showWidget();};
+$('#optSend').onchange=e=>{settings.send=e.target.checked;saveSettings();};
+$('#sendTo').oninput=e=>{settings.to=e.target.value;saveSettings();refreshSettingsUI();};
+
+function fmtG(g){const o=[];for(let r=0;r<9;r++){if(r&&r%3===0)o.push('');
+  let row='';for(let c=0;c<9;c++){if(c&&c%3===0)row+=' ';row+=(g[r*9+c]||'.');}o.push(row);}return o.join('\n');}
+function buildText(){return 'Sudoku solution\n\nSolution:\n'+fmtG(lastSol.sol)+'\n\nPuzzle:\n'+fmtG(lastSol.givens)+'\n';}
+function mailUrl(emails,text){return 'mailto:'+emails.map(encodeURIComponent).join(',')+'?subject='+encodeURIComponent('Sudoku solution')+'&body='+encodeURIComponent(text);}
+function smsUrl(phones,text){return 'sms:'+phones.join(',')+'?&body='+encodeURIComponent(text);}
+function openExternal(u){location.href=u;}
+$('#sendMail').onclick=()=>{if(lastSol)openExternal(mailUrl(parseTo().emails,buildText()));};
+$('#sendSms').onclick=()=>{if(lastSol)openExternal(smsUrl(parseTo().phones,buildText()));};
+
+function solutionBlob(){return new Promise(res=>{const c=document.createElement('canvas');c.width=c.height=720;
+  paintSolution(c,lastSol.sol,lastSol.givens.map(g=>!g));c.toBlob(res,'image/png');});}
+let shareInfo='';
+async function shareImage(){   // opens the phone's share sheet with the solution picture; pick the app and the people
+  if(!lastSol)return false;
+  const blob=await solutionBlob(),file=new File([blob],'sudoku-solution.png',{type:'image/png'});
+  if(window.zfl&&zfl.share&&zfl.share.image){   // ZFLOS host share sheet
+    try{const du=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(blob);});
+      await zfl.share.image(du,'Sudoku solution');shareInfo='Shared.';return true;}
+    catch(e){shareInfo=(e&&e.message)||'Could not share.';return false;}
+  }
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Sudoku solution'});shareInfo='Shared.';return true;}
+  }catch(e){if(e&&e.name==='AbortError'){shareInfo='Share cancelled.';return false;}}
+  // no share sheet here: save the picture instead
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sudoku-solution.png';document.body.appendChild(a);a.click();a.remove();
+  shareInfo='This browser has no share sheet, so the picture was saved as sudoku-solution.png. Attach it to your message.';return false;
+}
+$('#sendShare').onclick=async()=>{const ok=await shareImage();msg(ok?'Shared the solution picture.':shareInfo);};
+function autoSend(){
+  // Browsers cannot send silently or attach a picture to a prepared message, so: picture to the share sheet if it will open.
+  const canShareFiles=!!(navigator.canShare&&navigator.userActivation&&navigator.userActivation.isActive);
+  if(canShareFiles){shareImage().then(ok=>msg('Solved and verified. '+(ok?'Solution picture shared.':shareInfo+' Press Share picture to try again.')));}
+  else msg('Solved and verified. Press Share picture to send the solution as a picture.');
+}
+function afterSolve(sol,givens){
+  lastSol={sol:sol.slice(),givens:givens.slice()};
+  if(settings.float&&window.zfl&&zfl.overlay){   // ZFLOS host: real always-on-top widget, solver steps aside
+    fw.style.display='none';document.body.classList.remove('floatmode');
+    zfl.overlay.show('',{title:'Solution',grid:sol.slice(),auto:givens.map(g=>!g)})
+      .then(()=>zfl.app.toBack())
+      .catch(e=>msg('Floating widget: '+((e&&e.message)||e)));
+  }else if(settings.float){
+    showWidget();document.body.classList.add('floatmode');window.scrollTo(0,0);
+    try{ // a real always-on-top window needs a recent tap or click; if there is none, the on-page widget stays
+      if((window.documentPictureInPicture||vpOK)&&navigator.userActivation&&navigator.userActivation.isActive&&!fw.classList.contains('pip')&&!vp)$('#fwpop').click();
+    }catch(e){}
+  }else{fw.style.display='none';document.body.classList.remove('floatmode');}
+  refreshSettingsUI();
+  if(settings.send){const key=givens.join('');if(key!==lastSent){lastSent=key;autoSend();}}
+}
+refreshSettingsUI();
+
+// ---------- Image scan ----------
+let img=null, rect=null, scale=1;
+const cv=$('#cv'), ctx=cv.getContext('2d');
+function setImage(url){
+  const im=new Image();
+  im.onload=()=>{img=im;rectIsAuto=false;const w=Math.min(im.width,840);scale=im.width/w;cv.width=w;cv.height=Math.round(im.height/scale);
+    rect={x:0,y:0,w:cv.width,h:cv.height};$('#scan').style.display='block';draw();
+    const ag=autoGrid();
+    if(ag){rect=ag;draw();msg('Found the grid. Reading the digits...');setTimeout(()=>$('#doscan').click(),0);}
+    else msg(NOGRID);};
+  im.src=url;
+}
+const NOGRID='I could not find the whole grid. If the picture was taken at an angle, please retake it from straight above. Otherwise crop it so all of the 9x9 grid is in the picture and load it again. (Or drag a box around the grid and press Find digits.)';
+function fileChosen(e){const f=e.target.files[0];if(!f)return;setImage(URL.createObjectURL(f));e.target.value='';}
+$('#file').onchange=fileChosen;$('#camfile').onchange=fileChosen;
+
+// Camera works like a QR reader: it keeps looking at the live picture and, when it has read the whole
+// puzzle the same way in two frames in a row (and the result is a valid puzzle with one solution), it stops and solves.
+let camStream=null, liveOn=false, liveTimer=null, lastSig='', liveStart=0;
+function stopCam(){liveOn=false;clearTimeout(liveTimer);if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}$('#camwrap').style.display='none';}
+function readFrame(c){
+  img=c;scale=1;rectIsAuto=false;
+  const ag=autoGrid();if(!ag)return null;
+  rect=ag;
+  const st=runScan();if(st.odd>5||!st.cl.length)return null;
+  const tpl=loadTpl(),lab=[];
+  for(const c2 of st.cl){const m=c2.mean();let bs=0,bd=0;for(const t of tpl){const q=sim(t.v,m);if(q>bs){bs=q;bd=t.d;}}
+    if(bs<0.95)return null;lab.push(bd);}
+  const found=Array(81).fill(0);
+  st.cells.forEach((cell,i)=>{if(cell.kind==='glyph')found[i]=lab[st.assign[i]];else if(cell.kind==='maybe')found[i]=-1;});
+  if(found.includes(-1))return null;
+  if(conflicts(found).size)return null;
+  const r=solveAll(found,2);if(r.count!==1||!verify(r.first,found))return null;
+  return found;
+}
+function liveTry(){
+  if(!liveOn)return;
+  const v=$('#vid');
+  if(v.videoWidth){
+    const k=Math.min(1,1280/v.videoWidth),c=document.createElement('canvas');
+    c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);
+    c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+    let f=null;try{f=readFrame(c);}catch(e){f=null;}
+    const sig=f?f.join(''):'';
+    if(sig&&sig===lastSig){
+      stopCam();vals=f;auto.fill(false);unsure=new Set();bad=new Set();render();$('#solve').click();return;
+    }
+    lastSig=sig;
+    if(Date.now()-liveStart>12000)$('#camhint').innerHTML='<small>Still looking. Hold the phone steady, straight above the puzzle, with the whole grid filling most of the picture and no glare. If this keeps happening, use Load image instead.</small>';
+  }
+  liveTimer=setTimeout(liveTry,350);
+}
+
+// Screen print: pick a window, tab or screen, grab one picture of it, and read the puzzle from that picture.
+$('#scr').onclick=async()=>{
+  if(window.zfl&&zfl.screenshot){   // ZFLOS host: pick the app, capture it, read the puzzle
+    try{msg('Pick the app that shows the puzzle, then tap Capture.');const u=await zfl.screenshot.pick();msg('Reading the screenshot...');setImage(u);}
+    catch(e){msg((e&&e.message)||'Screenshot failed.');}
+    return;
+  }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
+    msg('This browser cannot capture other apps. Take a screenshot with the phone itself (usually Power + Volume Down), then press Load image and pick it.');return;}
+  let st=null;
+  try{
+    st=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+    const v=document.createElement('video');v.muted=true;v.playsInline=true;v.srcObject=st;await v.play();
+    for(let k=3;k>=1;k--){msg('Capturing in '+k+'... switch to the puzzle now if it is not showing.');await new Promise(r=>setTimeout(r,1000));}
+    const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
+    st.getTracks().forEach(t=>t.stop());st=null;
+    c.toBlob(b=>setImage(URL.createObjectURL(b)),'image/png');
+  }catch(e){
+    if(st)st.getTracks().forEach(t=>t.stop());
+    msg(e&&e.name==='NotAllowedError'?'Screen capture was cancelled.':'Could not capture the screen here. Take a screenshot with the phone and use Load image.');
+  }
+};
+$('#cam').onclick=async()=>{
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('no camera api');
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    $('#vid').srcObject=camStream;$('#camwrap').style.display='block';$('#scan').style.display='none';
+    $('#camhint').innerHTML='<small>Point the camera straight down at the puzzle so the whole grid is in view. It reads it by itself.</small>';
+    msg('Looking for the puzzle...');lastSig='';liveStart=Date.now();liveOn=true;liveTry();
+  }catch(e){$('#camfile').click();}   // no live camera here: use the phone\'s own camera app instead
+};
+$('#camcancel').onclick=stopCam;
+
+// ---------- Grid finding, digit reading ----------
+
+function draw(){
+  ctx.drawImage(img,0,0,cv.width,cv.height);
+  if(rect){ctx.strokeStyle='#ff2a2a';ctx.lineWidth=3;ctx.strokeRect(rect.x,rect.y,rect.w,rect.h);}
+}
+let drag=null;
+function pos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height};}
+cv.onpointerdown=e=>{rectIsAuto=false;drag=pos(e);cv.setPointerCapture(e.pointerId);};
+cv.onpointermove=e=>{if(!drag)return;const p=pos(e);
+  rect={x:Math.min(drag.x,p.x),y:Math.min(drag.y,p.y),w:Math.abs(p.x-drag.x),h:Math.abs(p.y-drag.y)};draw();};
+cv.onpointerup=()=>{drag=null;};
+
+// ---------- Scan: group the cells by digit SHAPE, then name each shape once ----------
+// A grid only contains 9 different digit shapes, and the same digit looks identical every time it appears.
+// So we compare the cells with each other (no guessing from a font), end up with at most ~9 groups,
+// and only those groups need a name. Confirmed shapes are remembered on this device for next time.
+const GL=24, T_SAME=0.90;
+let scanState=null, rectIsAuto=false;
+
+function blur3(v){
+  const o=new Float32Array(v.length);
+  for(let y=0;y<GL;y++)for(let x=0;x<GL;x++){let s=0,n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy;if(X>=0&&X<GL&&Y>=0&&Y<GL){s+=v[Y*GL+X];n++;}}
+    o[y*GL+x]=s/n;}
+  return o;
+}
+function sim(a,b){let d=0,na=0,nb=0;for(let k=0;k<a.length;k++){d+=a[k]*b[k];na+=a[k]*a[k];nb+=b[k]*b[k];}return d/Math.sqrt(na*nb+1e-9);}
+
+function cellGlyph(i,g){
+  const r=i/9|0,c=i%9,m=0.16;
+  const x=g.sx+c*g.cw+g.cw*m, y=g.sy+r*g.ch+g.ch*m, w=g.cw*(1-2*m), h=g.ch*(1-2*m);
+  const tw=Math.max(8,Math.round(w)), th=Math.max(8,Math.round(h));
+  g.tmp.width=tw;g.tmp.height=th;g.tc.drawImage(img,x,y,w,h,0,0,tw,th);
+  const d=g.tc.getImageData(0,0,tw,th).data, n=tw*th, lum=new Float32Array(n);
+  for(let k=0;k<n;k++)lum[k]=0.299*d[4*k]+0.587*d[4*k+1]+0.114*d[4*k+2];
+  const bg=[...lum].sort((a,b)=>a-b)[n>>1];
+  const ink=new Uint8Array(n);
+  for(let k=0;k<n;k++)if(lum[k]<bg-60)ink[k]=1;
+  let dropped=0;const stack=[];
+  const mark=k=>{if(ink[k]){ink[k]=0;dropped++;stack.push(k);}};
+  for(let xx=0;xx<tw;xx++){mark(xx);mark((th-1)*tw+xx);}
+  for(let yy=0;yy<th;yy++){mark(yy*tw);mark(yy*tw+tw-1);}
+  while(stack.length){const k=stack.pop(),px=k%tw,py=(k/tw)|0;
+    if(px>0)mark(k-1);if(px<tw-1)mark(k+1);if(py>0)mark(k-tw);if(py<th-1)mark(k+tw);}
+  let cnt=0,minx=1e9,miny=1e9,maxx=-1,maxy=-1;
+  for(let k=0;k<n;k++)if(ink[k]){cnt++;const px=k%tw,py=(k/tw)|0;
+    if(px<minx)minx=px;if(px>maxx)maxx=px;if(py<miny)miny=py;if(py>maxy)maxy=py;}
+  if(cnt<n*0.012)return dropped>n*0.03?{kind:'maybe'}:{kind:'blank'};
+  if(cnt<n*0.03||(maxy-miny)<th*0.3)return {kind:'maybe'};
+  const bw=maxx-minx+1,bh=maxy-miny+1;
+  const q=document.createElement('canvas');q.width=bw;q.height=bh;const qc=q.getContext('2d');
+  const id=qc.createImageData(bw,bh);
+  for(let yy=0;yy<bh;yy++)for(let xx=0;xx<bw;xx++){const v=ink[(miny+yy)*tw+minx+xx]?0:255,o=4*(yy*bw+xx);
+    id.data[o]=id.data[o+1]=id.data[o+2]=v;id.data[o+3]=255;}
+  qc.putImageData(id,0,0);
+  g.gx.fillStyle='#fff';g.gx.fillRect(0,0,GL,GL);
+  const k2=20/Math.max(bw,bh);g.gx.drawImage(q,(GL-bw*k2)/2,(GL-bh*k2)/2,bw*k2,bh*k2);
+  const dd=g.gx.getImageData(0,0,GL,GL).data, v=new Float32Array(GL*GL);
+  for(let k=0;k<GL*GL;k++)v[k]=1-dd[4*k]/255;
+  return {kind:'glyph',v:blur3(v)};
+}
+
+function clusterGlyphs(glyphs,T){
+  let cl=[];
+  const add=(c,g)=>{c.members.push(g);for(let k=0;k<c.sum.length;k++)c.sum[k]+=g.v[k];};
+  for(const g of glyphs){
+    let best=null,bs=0;
+    for(const c of cl){const s=sim(c.mean(),g.v);if(s>bs){bs=s;best=c;}}
+    if(best&&bs>=T)add(best,g);
+    else{const c={members:[],sum:new Float32Array(GL*GL),mean(){return this.sum.map(x=>x/this.members.length);}};add(c,g);cl.push(c);}
+  }
+  for(let round=0;round<2;round++){   // re-assign everything to the nearest final group
+    const means=cl.map(c=>c.mean());
+    const nc=means.map(()=>({members:[],sum:new Float32Array(GL*GL),mean(){return this.sum.map(x=>x/this.members.length);}}));
+    for(const g of glyphs){let b=0,bs=-1;means.forEach((m,j)=>{const s=sim(m,g.v);if(s>bs){bs=s;b=j;}});add(nc[b],g);}
+    cl=nc.filter(c=>c.members.length);
+  }
+  return cl;
+}
+
+const TPL_KEY='zfl_sudoku_shapes_v1';
+const BUILTIN=[{"d":1,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.13,0.24,0.3,0.2,0.08,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.08,0.21,0.43,0.57,0.62,0.4,0.18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.04,0.14,0.34,0.54,0.77,0.9,0.94,0.61,0.27,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.07,0.22,0.43,0.66,0.75,0.87,0.9,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.18,0.44,0.7,0.73,0.6,0.67,0.79,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.19,0.41,0.56,0.48,0.27,0.45,0.68,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.12,0.23,0.27,0.15,0.04,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.01,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.95,0.61,0.28,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.03,0.06,0.09,0.09,0.4,0.7,0.96,0.66,0.36,0.09,0.06,0.03,0,0,0,0,0,0,0,0,0,0,0,0.06,0.2,0.34,0.43,0.43,0.62,0.81,0.98,0.79,0.59,0.43,0.39,0.24,0.1,0,0,0,0,0,0,0,0,0,0,0.1,0.36,0.61,0.76,0.76,0.84,0.92,0.99,0.91,0.83,0.76,0.71,0.46,0.2,0,0,0,0,0,0,0,0,0,0,0.1,0.33,0.55,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.65,0.42,0.2,0,0,0,0,0,0,0,0,0,0,0.05,0.16,0.27,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.32,0.21,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":2,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.05,0.15,0.26,0.33,0.33,0.33,0.27,0.16,0.05,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.13,0.29,0.48,0.6,0.66,0.67,0.66,0.6,0.48,0.26,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0.14,0.36,0.63,0.78,0.82,0.8,0.81,0.89,0.91,0.81,0.57,0.29,0.08,0,0,0,0,0,0,0,0,0,0,0,0.24,0.52,0.75,0.7,0.56,0.48,0.48,0.6,0.79,0.92,0.85,0.52,0.19,0,0,0,0,0,0,0,0,0,0,0,0.21,0.39,0.5,0.37,0.22,0.14,0.15,0.27,0.57,0.82,0.97,0.65,0.31,0.01,0,0,0,0,0,0,0,0,0,0,0.1,0.17,0.17,0.07,0,0,0,0.05,0.37,0.7,0.99,0.69,0.35,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.32,0.66,0.99,0.69,0.36,0.03,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.32,0.66,0.99,0.68,0.35,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.05,0.38,0.72,0.97,0.64,0.31,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.16,0.49,0.83,0.86,0.52,0.19,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.09,0.36,0.7,0.89,0.7,0.37,0.08,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.22,0.56,0.86,0.83,0.5,0.18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.15,0.46,0.78,0.85,0.61,0.28,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.14,0.38,0.71,0.8,0.66,0.32,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.13,0.37,0.69,0.8,0.67,0.34,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.12,0.35,0.69,0.8,0.68,0.35,0.12,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.34,0.67,0.8,0.69,0.36,0.13,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.33,0.66,0.83,0.76,0.47,0.22,0.09,0.08,0.08,0.08,0.08,0.06,0.03,0,0,0,0,0,0,0,0,0,0,0.22,0.55,0.89,0.94,0.76,0.57,0.43,0.42,0.42,0.42,0.42,0.42,0.28,0.14,0,0,0,0,0,0,0,0,0,0,0.33,0.66,1,0.94,0.86,0.77,0.75,0.75,0.75,0.75,0.75,0.75,0.5,0.25,0,0,0,0,0,0,0,0,0,0,0.22,0.44,0.66,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.44,0.22,0,0,0,0,0,0,0,0,0,0,0.11,0.22,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.22,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":3,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.03,0.13,0.24,0.32,0.33,0.33,0.31,0.2,0.09,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.25,0.46,0.57,0.66,0.67,0.66,0.64,0.53,0.31,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0.05,0.28,0.52,0.75,0.79,0.79,0.77,0.83,0.9,0.86,0.63,0.32,0.1,0,0,0,0,0,0,0,0,0,0,0,0.09,0.39,0.62,0.71,0.55,0.47,0.44,0.5,0.7,0.88,0.88,0.54,0.21,0,0,0,0,0,0,0,0,0,0,0,0.08,0.28,0.39,0.38,0.22,0.13,0.11,0.17,0.45,0.74,0.96,0.66,0.33,0.01,0,0,0,0,0,0,0,0,0,0,0.03,0.12,0.12,0.09,0,0,0,0,0.27,0.6,0.94,0.68,0.35,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.27,0.6,0.93,0.68,0.35,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.07,0.37,0.7,0.93,0.64,0.3,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.03,0.05,0.07,0.16,0.32,0.62,0.83,0.83,0.5,0.19,0,0,0,0,0,0,0,0,0,0,0,0,0,0.12,0.25,0.39,0.41,0.5,0.65,0.75,0.74,0.52,0.28,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0.23,0.47,0.72,0.74,0.83,0.92,0.91,0.78,0.45,0.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.22,0.44,0.67,0.67,0.67,0.74,0.76,0.76,0.57,0.34,0.12,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.22,0.33,0.33,0.34,0.41,0.56,0.78,0.82,0.67,0.33,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.08,0.23,0.56,0.82,0.89,0.56,0.22,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.04,0.37,0.71,1,0.66,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,1,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.08,0.08,0.08,0,0,0,0,0,0.06,0.39,0.73,1,0.66,0.33,0,0,0,0,0,0,0,0,0,0,0.19,0.3,0.38,0.24,0.12,0.05,0.02,0.09,0.27,0.58,0.84,0.9,0.57,0.23,0,0,0,0,0,0,0,0,0,0,0.29,0.51,0.7,0.57,0.46,0.38,0.35,0.43,0.6,0.8,0.87,0.71,0.38,0.12,0,0,0,0,0,0,0,0,0,0,0.21,0.46,0.75,0.8,0.78,0.71,0.69,0.76,0.85,0.83,0.67,0.38,0.16,0.02,0,0,0,0,0,0,0,0,0,0,0.1,0.23,0.45,0.57,0.66,0.66,0.67,0.66,0.64,0.53,0.34,0.14,0.03,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.12,0.23,0.33,0.33,0.33,0.33,0.31,0.2,0.09,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":4,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.07,0.18,0.29,0.33,0.24,0.13,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.18,0.4,0.62,0.67,0.49,0.26,0.04,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.39,0.72,0.95,1,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.03,0.24,0.57,0.78,0.9,0.9,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.14,0.46,0.74,0.73,0.74,0.79,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.08,0.33,0.66,0.75,0.52,0.53,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.2,0.53,0.77,0.63,0.32,0.41,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.42,0.75,0.77,0.46,0.15,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.24,0.58,0.78,0.58,0.24,0.04,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0.12,0.46,0.77,0.76,0.42,0.11,0.03,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0.06,0.3,0.63,0.77,0.53,0.2,0,0.03,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0.18,0.5,0.76,0.68,0.35,0.09,0,0.03,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0.11,0.39,0.72,0.77,0.48,0.15,0,0,0.03,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0.22,0.55,0.88,0.81,0.58,0.35,0.31,0.31,0.33,0.56,0.79,0.82,0.59,0.35,0.2,0.1,0,0,0,0,0,0,0,0,0.33,0.66,0.99,0.88,0.76,0.64,0.64,0.64,0.65,0.77,0.89,0.91,0.79,0.66,0.42,0.21,0,0,0,0,0,0,0,0,0.24,0.51,0.77,0.78,0.77,0.76,0.76,0.76,0.79,0.87,0.95,0.95,0.87,0.75,0.46,0.21,0,0,0,0,0,0,0,0,0.13,0.28,0.43,0.45,0.45,0.45,0.45,0.45,0.48,0.67,0.85,0.86,0.68,0.46,0.27,0.12,0,0,0,0,0,0,0,0,0.02,0.06,0.1,0.12,0.12,0.12,0.12,0.12,0.16,0.45,0.75,0.77,0.48,0.15,0.04,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.03,0.36,0.69,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.36,0.69,0.73,0.4,0.06,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.24,0.46,0.49,0.26,0.04,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.12,0.23,0.24,0.13,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":5,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.22,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.22,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0.22,0.44,0.66,0.67,0.67,0.67,0.67,0.67,0.67,0.66,0.44,0.22,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.66,0.93,0.86,0.79,0.79,0.79,0.79,0.79,0.76,0.5,0.23,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.82,0.64,0.46,0.45,0.45,0.45,0.45,0.43,0.28,0.13,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.71,0.41,0.12,0.12,0.12,0.12,0.12,0.1,0.05,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.68,0.36,0.03,0.03,0.03,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.79,0.58,0.37,0.37,0.36,0.35,0.29,0.17,0.06,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.9,0.8,0.7,0.7,0.69,0.68,0.62,0.48,0.26,0.09,0,0,0,0,0,0,0,0,0,0,0,0,0.22,0.44,0.67,0.67,0.67,0.67,0.7,0.81,0.87,0.81,0.57,0.29,0.09,0,0,0,0,0,0,0,0,0,0,0,0.11,0.22,0.33,0.33,0.33,0.33,0.37,0.48,0.7,0.87,0.85,0.51,0.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.04,0.15,0.45,0.75,0.95,0.65,0.31,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.27,0.6,0.94,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.23,0.57,0.9,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.26,0.59,0.93,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.01,0.01,0.01,0,0,0,0,0,0.08,0.38,0.71,0.93,0.63,0.3,0,0,0,0,0,0,0,0,0,0,0.12,0.23,0.3,0.2,0.09,0.02,0.05,0.15,0.35,0.63,0.86,0.85,0.51,0.19,0,0,0,0,0,0,0,0,0,0,0.23,0.45,0.63,0.53,0.42,0.36,0.38,0.49,0.68,0.84,0.84,0.61,0.29,0.08,0,0,0,0,0,0,0,0,0,0,0.22,0.5,0.79,0.81,0.75,0.69,0.71,0.81,0.85,0.79,0.58,0.31,0.11,0,0,0,0,0,0,0,0,0,0,0,0.11,0.28,0.5,0.61,0.66,0.66,0.66,0.65,0.58,0.46,0.25,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0.06,0.16,0.27,0.32,0.33,0.33,0.32,0.25,0.14,0.04,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":6,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.05,0.16,0.27,0.33,0.33,0.33,0.31,0.2,0.09,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.12,0.28,0.49,0.6,0.66,0.67,0.66,0.65,0.45,0.23,0.02,0,0,0,0,0,0,0,0,0,0,0,0.01,0.13,0.35,0.61,0.78,0.79,0.74,0.69,0.7,0.77,0.57,0.32,0.03,0,0,0,0,0,0,0,0,0,0,0,0.12,0.35,0.68,0.79,0.74,0.53,0.41,0.35,0.37,0.46,0.37,0.22,0.03,0,0,0,0,0,0,0,0,0,0,0.02,0.24,0.58,0.82,0.71,0.44,0.2,0.08,0.02,0.04,0.12,0.12,0.09,0.01,0,0,0,0,0,0,0,0,0,0,0.12,0.45,0.79,0.81,0.49,0.15,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.24,0.57,0.86,0.66,0.33,0.03,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.66,0.87,0.54,0.21,0,0.01,0.01,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.8,0.54,0.32,0.3,0.34,0.34,0.34,0.33,0.23,0.11,0.01,0,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.84,0.69,0.58,0.63,0.67,0.67,0.67,0.66,0.56,0.35,0.13,0.01,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.92,0.82,0.72,0.68,0.67,0.66,0.71,0.82,0.83,0.68,0.35,0.12,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.91,0.73,0.52,0.38,0.33,0.33,0.38,0.58,0.8,0.88,0.56,0.23,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.82,0.53,0.2,0.05,0.01,0,0.05,0.28,0.61,0.89,0.66,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.74,0.4,0.07,0,0,0,0,0.14,0.47,0.8,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.79,0.46,0.13,0,0,0,0,0.07,0.4,0.73,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.88,0.55,0.21,0,0,0,0,0.12,0.45,0.79,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.31,0.64,0.94,0.65,0.32,0.02,0,0,0.01,0.22,0.56,0.88,0.66,0.33,0,0,0,0,0,0,0,0,0,0,0.2,0.53,0.86,0.8,0.51,0.18,0.05,0.05,0.17,0.47,0.76,0.86,0.56,0.22,0,0,0,0,0,0,0,0,0,0,0.09,0.36,0.69,0.84,0.74,0.51,0.38,0.38,0.5,0.73,0.81,0.7,0.36,0.11,0,0,0,0,0,0,0,0,0,0,0,0.16,0.39,0.72,0.83,0.82,0.72,0.71,0.8,0.8,0.67,0.37,0.14,0.01,0,0,0,0,0,0,0,0,0,0,0,0.05,0.17,0.38,0.56,0.66,0.67,0.66,0.64,0.53,0.33,0.14,0.03,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.12,0.23,0.33,0.33,0.33,0.3,0.19,0.08,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":7,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.03,0.14,0.25,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.33,0.24,0.13,0.02,0,0,0,0,0,0,0,0,0.11,0.33,0.55,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.52,0.3,0.08,0,0,0,0,0,0,0,0,0.11,0.39,0.67,0.84,0.84,0.84,0.84,0.84,0.84,0.84,0.88,0.94,0.99,0.76,0.42,0.09,0,0,0,0,0,0,0,0,0.07,0.24,0.41,0.51,0.51,0.51,0.51,0.51,0.51,0.51,0.66,0.83,0.99,0.74,0.41,0.07,0,0,0,0,0,0,0,0,0,0.06,0.12,0.17,0.17,0.17,0.17,0.17,0.17,0.21,0.47,0.75,0.93,0.62,0.29,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.14,0.47,0.81,0.83,0.5,0.17,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.26,0.59,0.87,0.68,0.35,0.06,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.44,0.77,0.84,0.52,0.18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.22,0.56,0.88,0.73,0.4,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.08,0.4,0.74,0.89,0.57,0.24,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.19,0.53,0.85,0.78,0.45,0.12,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.07,0.37,0.7,0.9,0.62,0.28,0.02,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.18,0.51,0.85,0.82,0.48,0.15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.31,0.65,0.92,0.67,0.34,0.04,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.13,0.46,0.8,0.85,0.52,0.19,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.26,0.59,0.9,0.74,0.4,0.08,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.44,0.78,0.89,0.56,0.23,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.22,0.56,0.88,0.77,0.44,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.09,0.4,0.74,0.9,0.59,0.26,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.2,0.53,0.86,0.8,0.47,0.14,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.2,0.42,0.64,0.48,0.25,0.03,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.11,0.22,0.33,0.22,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":8,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.21,0.32,0.33,0.33,0.32,0.25,0.13,0.03,0,0,0,0,0,0,0,0,0,0,0,0,0,0.05,0.16,0.37,0.54,0.65,0.67,0.67,0.66,0.58,0.44,0.22,0.08,0,0,0,0,0,0,0,0,0,0,0,0.01,0.17,0.39,0.7,0.81,0.81,0.71,0.71,0.81,0.84,0.77,0.49,0.23,0.04,0,0,0,0,0,0,0,0,0,0,0.09,0.36,0.7,0.83,0.71,0.49,0.38,0.38,0.48,0.71,0.85,0.78,0.44,0.14,0,0,0,0,0,0,0,0,0,0,0.2,0.54,0.86,0.76,0.48,0.16,0.05,0.04,0.15,0.47,0.76,0.9,0.59,0.25,0,0,0,0,0,0,0,0,0,0,0.29,0.62,0.94,0.65,0.31,0,0,0,0,0.3,0.64,0.94,0.64,0.31,0,0,0,0,0,0,0,0,0,0,0.29,0.62,0.93,0.67,0.34,0.03,0,0,0.02,0.33,0.66,0.9,0.6,0.26,0,0,0,0,0,0,0,0,0,0,0.19,0.52,0.85,0.8,0.51,0.19,0.05,0.03,0.16,0.48,0.77,0.79,0.46,0.15,0,0,0,0,0,0,0,0,0,0,0.09,0.33,0.67,0.83,0.74,0.52,0.36,0.34,0.48,0.7,0.76,0.57,0.26,0.05,0,0,0,0,0,0,0,0,0,0,0.01,0.14,0.36,0.68,0.82,0.82,0.7,0.67,0.72,0.72,0.56,0.29,0.09,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.18,0.5,0.82,0.99,0.98,0.98,0.92,0.79,0.46,0.19,0,0,0,0,0,0,0,0,0,0,0,0,0,0.09,0.25,0.57,0.78,0.84,0.76,0.77,0.82,0.79,0.59,0.34,0.13,0.02,0,0,0,0,0,0,0,0,0,0,0.1,0.3,0.56,0.71,0.7,0.54,0.42,0.44,0.6,0.8,0.82,0.67,0.34,0.12,0,0,0,0,0,0,0,0,0,0.01,0.22,0.53,0.81,0.74,0.5,0.21,0.09,0.11,0.27,0.53,0.78,0.84,0.61,0.28,0.05,0,0,0,0,0,0,0,0,0.09,0.4,0.74,0.83,0.53,0.2,0.02,0,0,0.05,0.22,0.55,0.83,0.78,0.45,0.12,0,0,0,0,0,0,0,0,0.2,0.53,0.86,0.73,0.4,0.07,0,0,0,0,0.06,0.39,0.72,0.87,0.53,0.2,0,0,0,0,0,0,0,0,0.24,0.57,0.9,0.72,0.38,0.05,0,0,0,0,0.07,0.4,0.73,0.82,0.49,0.16,0,0,0,0,0,0,0,0,0.16,0.49,0.83,0.83,0.57,0.24,0.08,0,0,0.06,0.24,0.57,0.84,0.74,0.41,0.08,0,0,0,0,0,0,0,0,0.05,0.3,0.64,0.86,0.79,0.58,0.41,0.34,0.34,0.39,0.57,0.79,0.84,0.55,0.22,0,0,0,0,0,0,0,0,0,0,0.14,0.36,0.66,0.82,0.82,0.74,0.67,0.67,0.72,0.78,0.77,0.6,0.33,0.1,0,0,0,0,0,0,0,0,0,0,0.03,0.14,0.33,0.52,0.63,0.66,0.67,0.67,0.66,0.61,0.49,0.27,0.11,0,0,0,0,0,0,0,0,0,0,0,0,0,0.08,0.19,0.3,0.33,0.33,0.33,0.33,0.27,0.16,0.05,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"d":9,"v":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.06,0.17,0.28,0.33,0.33,0.32,0.21,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.13,0.31,0.5,0.61,0.66,0.67,0.65,0.54,0.37,0.16,0.05,0,0,0,0,0,0,0,0,0,0,0,0,0.14,0.36,0.64,0.76,0.76,0.7,0.72,0.82,0.82,0.7,0.39,0.17,0.01,0,0,0,0,0,0,0,0,0,0,0.11,0.36,0.69,0.82,0.72,0.5,0.38,0.39,0.53,0.75,0.85,0.72,0.39,0.12,0,0,0,0,0,0,0,0,0,0,0.23,0.56,0.87,0.77,0.48,0.17,0.04,0.06,0.19,0.52,0.8,0.89,0.56,0.23,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.9,0.58,0.25,0.02,0,0,0.02,0.27,0.61,0.92,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.82,0.49,0.15,0,0,0,0,0.16,0.49,0.83,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.77,0.44,0.1,0,0,0,0,0.05,0.38,0.72,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.67,0.85,0.51,0.18,0,0,0,0,0.02,0.35,0.69,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.33,0.66,0.92,0.66,0.32,0.07,0,0,0.01,0.12,0.45,0.78,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.22,0.55,0.89,0.84,0.62,0.4,0.33,0.33,0.34,0.45,0.67,0.89,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0.11,0.33,0.66,0.84,0.84,0.73,0.67,0.67,0.66,0.69,0.8,0.91,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0.11,0.33,0.55,0.68,0.73,0.75,0.72,0.67,0.57,0.68,0.81,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.21,0.35,0.39,0.41,0.39,0.34,0.27,0.49,0.72,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.02,0.06,0.08,0.06,0.02,0.14,0.48,0.81,0.67,0.33,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.01,0.26,0.6,0.83,0.58,0.24,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.13,0.46,0.79,0.8,0.47,0.13,0,0,0,0,0,0,0,0,0,0,0.08,0.14,0.17,0.09,0.03,0,0.06,0.17,0.4,0.68,0.81,0.59,0.26,0.02,0,0,0,0,0,0,0,0,0,0,0.19,0.36,0.5,0.42,0.36,0.33,0.39,0.5,0.72,0.82,0.72,0.39,0.13,0,0,0,0,0,0,0,0,0,0,0,0.19,0.46,0.71,0.74,0.69,0.67,0.72,0.79,0.79,0.66,0.39,0.17,0.02,0,0,0,0,0,0,0,0,0,0,0,0.12,0.33,0.55,0.65,0.66,0.67,0.66,0.62,0.51,0.33,0.15,0.04,0,0,0,0,0,0,0,0,0,0,0,0,0,0.1,0.21,0.32,0.33,0.33,0.33,0.29,0.18,0.07,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}];
+function loadSaved(){try{return JSON.parse(localStorage.getItem(TPL_KEY)||'[]').map(t=>({d:t.d,v:Float32Array.from(t.v)}));}catch(e){return [];}}
+function loadTpl(){return BUILTIN.map(t=>({d:t.d,v:Float32Array.from(t.v)})).concat(loadSaved());}
+function saveTpl(list){try{localStorage.setItem(TPL_KEY,JSON.stringify(list.slice(-60).map(t=>({d:t.d,v:Array.from(t.v,x=>Math.round(x*100)/100)}))));}catch(e){}}
+
+
+// Offline guess for digit shapes it has never seen: draw 1-9 in the fonts this device has and compare.
+let FONT_TPL=null;
+function fontTemplates(){
+  if(FONT_TPL)return FONT_TPL;
+  const fonts=['Arial','Helvetica','Roboto','Verdana','Tahoma','Georgia','Times New Roman','Segoe UI','sans-serif','serif','monospace'],out=[];
+  const c=document.createElement('canvas');c.width=c.height=120;const x=c.getContext('2d',{willReadFrequently:true});
+  const g=document.createElement('canvas');g.width=g.height=GL;const gx=g.getContext('2d',{willReadFrequently:true});
+  for(const f of fonts)for(const w of ['400','700'])for(let n=1;n<=9;n++){
+    x.fillStyle='#fff';x.fillRect(0,0,120,120);x.fillStyle='#000';x.textAlign='center';
+    x.font=`${w} 90px ${f.includes(' ')?'"'+f+'"':f}`;x.fillText(String(n),60,95);
+    const d=x.getImageData(0,0,120,120).data;let minx=999,miny=999,maxx=-1,maxy=-1;
+    for(let k=0;k<14400;k++)if(d[4*k]<128){const px=k%120,py=(k/120)|0;if(px<minx)minx=px;if(px>maxx)maxx=px;if(py<miny)miny=py;if(py>maxy)maxy=py;}
+    if(maxx<0)continue;
+    const bw=maxx-minx+1,bh=maxy-miny+1;gx.fillStyle='#fff';gx.fillRect(0,0,GL,GL);
+    const k2=20/Math.max(bw,bh);gx.drawImage(c,minx,miny,bw,bh,(GL-bw*k2)/2,(GL-bh*k2)/2,bw*k2,bh*k2);
+    const dd=gx.getImageData(0,0,GL,GL).data,v=new Float32Array(GL*GL);
+    for(let k=0;k<GL*GL;k++)v[k]=1-dd[4*k]/255;
+    out.push({d:n,v:blur3(v)});
+  }
+  return FONT_TPL=out;
+}
+function fontGuess(mean){
+  const best={};for(const t of fontTemplates()){const s=sim(t.v,mean);if(!(best[t.d]>=s))best[t.d]=s;}
+  const r=Object.entries(best).sort((a,b)=>b[1]-a[1]);
+  return r.length>1&&r[0][1]>=0.80&&r[0][1]-r[1][1]>=0.04?r[0][0]:'';
+}
+
+function thumb(v,px){
+  const c=document.createElement('canvas');c.width=c.height=GL;const x=c.getContext('2d'),id=x.createImageData(GL,GL);
+  for(let k=0;k<GL*GL;k++){const s=255*(1-Math.min(1,v[k]*1.2));id.data[4*k]=id.data[4*k+1]=id.data[4*k+2]=s;id.data[4*k+3]=255;}
+  x.putImageData(id,0,0);c.style.width=c.style.height=px+'px';return c;
+}
+
+function showKey(){
+  const K=$('#key');K.innerHTML='';const {cl}=scanState, tpl=loadTpl();
+  cl.forEach((c,ci)=>{
+    const mean=c.mean(),box=document.createElement('div');box.className='kitem';
+    box.appendChild(thumb(mean,56));
+    const cnt=document.createElement('div');cnt.textContent='×'+c.members.length;box.appendChild(cnt);
+    const sel=document.createElement('select');sel.id='k'+ci;sel.style.fontSize='20px';
+    sel.innerHTML='<option value="">?</option>'+[1,2,3,4,5,6,7,8,9].map(n=>`<option>${n}</option>`).join('');
+    let bs=0,bd=0;for(const t of tpl){const s=sim(t.v,mean);if(s>bs){bs=s;bd=t.d;}}
+    if(bs>=0.95){sel.value=String(bd);c.src='saved';}
+    else{const gd=fontGuess(mean);if(gd){sel.value=gd;sel.style.background='#ffe9a8';}}
+    box.appendChild(sel);K.appendChild(box);
+  });
+  const b=document.createElement('button');b.textContent='Use these digits';b.style.cssText='width:100%;margin-top:8px';b.onclick=applyKey;K.appendChild(b);
+  const allSaved=cl.every(c=>c.src==='saved');
+  const odd=scanState.cells.filter(c=>c.kind==='maybe').length;
+  msg(`Found ${cl.length} digit shape${cl.length===1?'':'s'}${cl.length>9?' (more than 9: some digits are drawn in more than one style, label each)':''}. `+
+      (odd>5?`WARNING: ${odd} cells look odd, so I have probably not found the grid correctly. If the picture was taken at an angle, please retake it from straight above. Otherwise crop it closer to the grid and load it again, or drag a box around the grid. `:'')+(allSaved?'All digits recognised.':'Some shapes are new to me. Yellow = my best guess: check it against the picture. Pick any ? boxes, then press "Use these digits".'));
+  if(allSaved&&odd<=5){applyKey();if(!unsure.size&&!bad.size)$('#solve').click();}
+}
+
+function applyKey(){
+  const {cells,cl,assign,ambig}=scanState,lab=[];
+  if(scanState.odd>5){msg(`I have probably not found the grid correctly (${scanState.odd} cells look odd). If the picture was taken at an angle, please retake it from straight above. Otherwise crop it so the whole 9x9 grid fills it and load it again, or drag a box around the grid and press Find digits.`);return;}
+  for(let ci=0;ci<cl.length;ci++){const v=+$('#k'+ci).value;if(!v){msg('Name every shape first (the ? boxes).');return;}lab.push(v);}
+  const found=Array(81).fill(0),us=new Set();
+  cells.forEach((c,i)=>{if(c.kind==='glyph'){found[i]=lab[assign[i]];if(ambig[i])us.add(i);}else if(c.kind==='maybe')us.add(i);});
+  const tpl=loadSaved();cl.forEach((c,ci)=>{if(c.src!=='saved')tpl.push({d:lab[ci],v:c.mean()});});saveTpl(tpl);
+  vals=found;auto.fill(false);unsure=us;bad=conflicts(vals);render();
+  draw();ctx.strokeStyle='#ff2a2a';ctx.lineWidth=1;
+  for(let k=1;k<9;k++){ctx.beginPath();ctx.moveTo(rect.x+rect.w*k/9,rect.y);ctx.lineTo(rect.x+rect.w*k/9,rect.y+rect.h);
+    ctx.moveTo(rect.x,rect.y+rect.h*k/9);ctx.lineTo(rect.x+rect.w,rect.y+rect.h*k/9);ctx.stroke();}
+  msg(`${found.filter(Boolean).length} digits placed. ${us.size?us.size+' yellow cell(s) look unusual: check them. ':''}Compare the grid with your photo, then press Solve.`);
+}
+
+// Step 1: find the 9x9 grid by itself. Its outline is the biggest, roughly square, connected set of sharp edges.
+function autoGrid(){
+  // Try several edge strengths / sizes so the result does not depend on how big the picture or the grid is.
+  for(const [thr,dil,md] of [[70,1,900],[70,0,1400],[40,0,1400],[40,1,1400],[25,0,1800]]){const r=autoGridTry(thr,dil,md);if(r)return r;}
+  return null;
+}
+function autoGridTry(thr,dil,md){
+  const W0=img.naturalWidth||img.width,H0=img.naturalHeight||img.height;
+  const f=Math.min(1,md/Math.max(W0,H0)),w=Math.max(20,Math.round(W0*f)),h=Math.max(20,Math.round(H0*f));
+  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0,w,h);const d=x.getImageData(0,0,w,h).data,n=w*h,L=new Float32Array(n);
+  for(let k=0;k<n;k++)L[k]=0.299*d[4*k]+0.587*d[4*k+1]+0.114*d[4*k+2];
+  const E=new Uint8Array(n);
+  for(let y=0;y<h;y++)for(let xx=0;xx<w;xx++){
+    const gx=L[y*w+Math.min(w-1,xx+1)]-L[y*w+Math.max(0,xx-1)],gy=L[Math.min(h-1,y+1)*w+xx]-L[Math.max(0,y-1)*w+xx];
+    if(Math.abs(gx)+Math.abs(gy)>thr)E[y*w+xx]=1;}
+  const D=new Uint8Array(n);
+  for(let y=0;y<h;y++)for(let xx=0;xx<w;xx++)if(E[y*w+xx])
+    for(let dy=-dil;dy<=dil;dy++)for(let dx=-dil;dx<=dil;dx++){const X=xx+dx,Y=y+dy;if(X>=0&&X<w&&Y>=0&&Y<h)D[Y*w+X]=1;}
+  const seen=new Uint8Array(n),stack=new Int32Array(n),cands=[],subs=[];let best=null;
+  for(let st=0;st<n;st++){
+    if(!D[st]||seen[st])continue;
+    let sp=0,minx=w,miny=h,maxx=0,maxy=0;stack[sp++]=st;seen[st]=1;
+    while(sp){const k=stack[--sp],px=k%w,py=(k/w)|0;
+      if(px<minx)minx=px;if(px>maxx)maxx=px;if(py<miny)miny=py;if(py>maxy)maxy=py;
+      if(px>0&&D[k-1]&&!seen[k-1]){seen[k-1]=1;stack[sp++]=k-1;}
+      if(px<w-1&&D[k+1]&&!seen[k+1]){seen[k+1]=1;stack[sp++]=k+1;}
+      if(py>0&&D[k-w]&&!seen[k-w]){seen[k-w]=1;stack[sp++]=k-w;}
+      if(py<h-1&&D[k+w]&&!seen[k+w]){seen[k+w]=1;stack[sp++]=k+w;}}
+    const bw=maxx-minx+1,bh=maxy-miny+1,asp=bw/bh;
+    if(bw>=w*0.2&&asp>0.85&&asp<1.18)cands.push({area:bw*bh,minx,miny,maxx,maxy});
+    else if(bw>=w*0.2&&bw>=40)subs.push({minx,miny,maxx,maxy,bw,bh});   // grid joined to other screen parts (pad, buttons, card edge): search inside
+  }
+  // A real Sudoku grid has 8 evenly spaced inner lines each way. Pick the candidate that shows that pattern.
+  const lineScore=c=>{
+    const bw=c.maxx-c.minx+1,bh=c.maxy-c.miny+1,cw=bw/9,ch=bh/9,cl=v=>Math.max(0,Math.min(w-1,Math.round(v))),rl=v=>Math.max(0,Math.min(h-1,Math.round(v)));
+    let tot=0,cnt=0;
+    for(let k=1;k<9;k++){
+      let X=cl(c.minx+k*cw),hit=0,n2=0;
+      for(let y=rl(c.miny+bh*0.05);y<=rl(c.maxy-bh*0.05);y+=2){
+        const ref=Math.max(L[y*w+cl(X-cw*0.4)],L[y*w+cl(X+cw*0.4)]),m=Math.min(L[y*w+cl(X-1)],L[y*w+X],L[y*w+cl(X+1)]);
+        n2++;if(m<ref-25)hit++;}
+      tot+=hit/Math.max(1,n2);cnt++;
+      let Y=rl(c.miny+k*ch);hit=0;n2=0;
+      for(let xx=cl(c.minx+bw*0.05);xx<=cl(c.maxx-bw*0.05);xx+=2){
+        const ref=Math.max(L[rl(Y-ch*0.4)*w+xx],L[rl(Y+ch*0.4)*w+xx]),m=Math.min(L[rl(Y-1)*w+xx],L[Y*w+xx],L[rl(Y+1)*w+xx]);
+        n2++;if(m<ref-25)hit++;}
+      tot+=hit/Math.max(1,n2);cnt++;
+    }
+    return tot/cnt;
+  };
+  // For a window cut out of a merged blob: the grid must have a border line on each outer edge and NO further grid lines just outside it.
+  const hfrac=(c,Y0)=>{let bestf=0;for(let dy=-2;dy<=2;dy++){const Y=Math.max(1,Math.min(h-2,Y0+dy));const bw=c.maxx-c.minx+1;let hit=0,n2=0;
+      for(let xx=c.minx+Math.round(bw*0.05);xx<=c.maxx-Math.round(bw*0.05);xx+=2){const ref=Math.max(L[Math.max(0,Y-Math.round(bw/9*0.4))*w+xx],L[Math.min(h-1,Y+Math.round(bw/9*0.4))*w+xx]);
+        const m=Math.min(L[(Y-1)*w+xx],L[Y*w+xx],L[(Y+1)*w+xx]);n2++;if(m<ref-25)hit++;}
+      bestf=Math.max(bestf,hit/Math.max(1,n2));}return bestf;};
+  const vfrac=(c,X0)=>{let bestf=0;for(let dx=-2;dx<=2;dx++){const X=Math.max(1,Math.min(w-2,X0+dx));const bh=c.maxy-c.miny+1;let hit=0,n2=0;
+      for(let y=c.miny+Math.round(bh*0.05);y<=c.maxy-Math.round(bh*0.05);y+=2){const ref=Math.max(L[y*w+Math.max(0,X-Math.round(bh/9*0.4))],L[y*w+Math.min(w-1,X+Math.round(bh/9*0.4))]);
+        const m=Math.min(L[y*w+X-1],L[y*w+X],L[y*w+X+1]);n2++;if(m<ref-25)hit++;}
+      bestf=Math.max(bestf,hit/Math.max(1,n2));}return bestf;};
+  const subScore=c=>{
+    const side=c.maxx-c.minx+1,cs=Math.round(side/9),inner=lineScore(c);if(inner<=0)return 0;
+    const t=hfrac(c,c.miny+1),bt=hfrac(c,c.maxy-1),l=vfrac(c,c.minx+1),r=vfrac(c,c.maxx-1);
+    const oy=(c.miny-cs>2?hfrac(c,c.miny-cs):0),oy2=(c.maxy+cs<h-3?hfrac(c,c.maxy+cs):0);
+    const ox=(c.minx-cs>2?vfrac(c,c.minx-cs):0),ox2=(c.maxx+cs<w-3?vfrac(c,c.maxx+cs):0);
+    const edge=Math.min(1,t*1.5)*Math.min(1,bt*1.5)*Math.min(1,l*1.5)*Math.min(1,r*1.5);
+    return inner*edge*(1-0.7*Math.max(oy,oy2,ox,ox2));
+  };
+  // ---- Corner-first search: find the top-left corner (a horizontal line and a vertical line that start at the same point),
+  // measure along both lines to guess the size, and keep the box that really looks like a 9x9 grid. Works wherever the grid sits.
+  {
+    const R=10,I=new Float64Array((w+1)*(h+1));
+    for(let y=0;y<h;y++){let rs=0;for(let xx=0;xx<w;xx++){rs+=L[y*w+xx];I[(y+1)*(w+1)+xx+1]=I[y*(w+1)+xx+1]+rs;}}
+    const D=new Uint8Array(n);
+    for(let y=0;y<h;y++)for(let xx=0;xx<w;xx++){
+      const x0=Math.max(0,xx-R),x1=Math.min(w,xx+R+1),y0=Math.max(0,y-R),y1=Math.min(h,y+R+1);
+      const m=(I[y1*(w+1)+x1]-I[y0*(w+1)+x1]-I[y1*(w+1)+x0]+I[y0*(w+1)+x0])/((x1-x0)*(y1-y0));
+      if(L[y*w+xx]<m-22)D[y*w+xx]=1;}
+    const minLen=Math.max(40,Math.round(0.2*Math.min(w,h))),GAP=3,Hs=[],Vs=[];
+    for(let y=0;y<h;y++){let xx=0;while(xx<w){if(!D[y*w+xx]){xx++;continue;}let e=xx,gap=0,k=xx;while(k<w&&gap<=GAP){if(D[y*w+k]){e=k;gap=0;}else gap++;k++;}if(e-xx+1>=minLen)Hs.push({y,x0:xx,x1:e});xx=e+1;}}
+    for(let xx=0;xx<w;xx++){let y=0;while(y<h){if(!D[y*w+xx]){y++;continue;}let e=y,gap=0,k=y;while(k<h&&gap<=GAP){if(D[k*w+xx]){e=k;gap=0;}else gap++;k++;}if(e-y+1>=minLen)Vs.push({x:xx,y0:y,y1:e});y=e+1;}}
+    const seenC=new Set(),boxes=[];
+    for(const hr of Hs)for(const vr of Vs){
+      if(Math.abs(vr.x-hr.x0)>5||Math.abs(vr.y0-hr.y)>5)continue;
+      const cx=Math.min(vr.x,hr.x0),cy=Math.min(vr.y0,hr.y),key=((cx/6)|0)+','+((cy/6)|0);
+      if(seenC.has(key))continue;seenC.add(key);
+      const Ss=new Set([Math.min(hr.x1-hr.x0,vr.y1-vr.y0)]);
+      for(const v2 of Vs)if(Math.abs(v2.y0-vr.y0)<=5&&v2.x-vr.x>=minLen)Ss.add(v2.x-vr.x);
+      for(const h2 of Hs)if(Math.abs(h2.x0-hr.x0)<=5&&h2.y-hr.y>=minLen)Ss.add(h2.y-hr.y);
+      for(const S of Ss){if(cx+S>=w||cy+S>=h)continue;boxes.push({minx:cx,miny:cy,maxx:cx+S,maxy:cy+S});}
+      if(boxes.length>400)break;
+    }
+    let cb=null,cs=0.30;
+    for(const b of boxes){const sc=subScore(b);if(sc>cs){cs=sc;cb=b;}}
+    if(cb){   // polish: nudge the corner and size by a few pixels
+      let bb=cb,bs=cs;
+      for(let dx=-3;dx<=3;dx++)for(let dy=-3;dy<=3;dy++)for(let dS=-3;dS<=3;dS++){
+        const c={minx:cb.minx+dx,miny:cb.miny+dy,maxx:cb.maxx+dx+dS,maxy:cb.maxy+dy+dS};
+        if(c.minx<1||c.miny<1||c.maxx>=w-1||c.maxy>=h-1)continue;
+        const sc=subScore(c);if(sc>bs){bs=sc;bb=c;}}
+      rectIsAuto=true;const ins=1.5;
+      return {x:(bb.minx+ins)/f/scale,y:(bb.miny+ins)/f/scale,w:(bb.maxx-bb.minx+1-2*ins)/f/scale,h:(bb.maxy-bb.miny+1-2*ins)/f/scale};
+    }
+  }
+  cands.sort((a,b)=>b.area-a.area);
+  let ps=0.45;
+  for(const c of cands.slice(0,8)){const sc=lineScore(c);if(sc>ps){ps=sc;best=c;}}
+  // Merged blobs: slide a square window of the blob's width (or height) along it and keep the one showing the grid-line pattern.
+  for(const b of subs.sort((a,c)=>c.bw*c.bh-a.bw*a.bh).slice(0,4)){
+    const side=Math.min(b.bw,b.bh),step=Math.max(2,Math.round(side*0.02));
+    if(b.bh>b.bw*1.18){for(let y0=b.miny;y0+side<=b.maxy+1;y0+=step){const c={minx:b.minx,maxx:b.maxx,miny:y0,maxy:y0+side-1};const sc=subScore(c);if(sc>ps){ps=sc;best=c;}}}
+    else if(b.bw>b.bh*1.18){for(let x0=b.minx;x0+side<=b.maxx+1;x0+=step){const c={minx:x0,maxx:x0+side-1,miny:b.miny,maxy:b.maxy};const sc=subScore(c);if(sc>ps){ps=sc;best=c;}}}
+  }
+  if(!best)return null;
+  const ins=1.5;rectIsAuto=true;
+  return {x:(best.minx+ins)/f/scale,y:(best.miny+ins)/f/scale,w:(best.maxx-best.minx+1-2*ins)/f/scale,h:(best.maxy-best.miny+1-2*ins)/f/scale};
+}
+
+// Snap the box onto the grid's own thick border lines, so a slightly sloppy box still lines up.
+function snapGrid(frac){
+  const W=img.naturalWidth||img.width,H=img.naturalHeight||img.height;
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);
+  const d=x.getImageData(0,0,W,H).data;
+  const L=(px,py)=>{const o=4*(py*W+px);return 0.299*d[o]+0.587*d[o+1]+0.114*d[o+2];};
+  let X0=rect.x*scale,Y0=rect.y*scale,X1=(rect.x+rect.w)*scale,Y1=(rect.y+rect.h)*scale;
+  const cell=Math.min(X1-X0,Y1-Y0)/9,S=Math.round(cell*(frac||0.22));
+  const samp=[];
+  for(let a=0;a<20;a++)for(let b=0;b<20;b++)samp.push(L(Math.min(W-1,Math.max(0,Math.round(X0+(X1-X0)*(a+.5)/20))),Math.min(H-1,Math.max(0,Math.round(Y0+(Y1-Y0)*(b+.5)/20)))));
+  const bg=samp.sort((a,b)=>a-b)[samp.length>>1];
+  function bestLine(pos,vertical,a0,a1){
+    const lo=Math.round(pos-S),scores=[],lim=vertical?W:H,span=vertical?H:W;
+    for(let p=lo;p<=Math.round(pos+S);p++){
+      if(p<2||p>lim-3){scores.push(0);continue;}
+      let s=0;for(let t=Math.max(0,Math.round(a0));t<Math.min(span,Math.round(a1));t+=2)s+=Math.max(0,bg-(vertical?L(p,t):L(t,p)));
+      scores.push(s);}
+    const sm=scores.map((_,i)=>{let s=0,n=0;for(let j=-3;j<=3;j++)if(scores[i+j]!==undefined){s+=scores[i+j];n++;}return s/n;});
+    let bi=0;sm.forEach((v,i)=>{if(v>sm[bi])bi=i;});
+    const med=[...sm].sort((a,b)=>a-b)[sm.length>>1];
+    return sm[bi]>1.3*med+1?lo+bi:pos;
+  }
+  X0=bestLine(X0,true,Y0,Y1);X1=bestLine(X1,true,Y0,Y1);
+  Y0=bestLine(Y0,false,X0,X1);Y1=bestLine(Y1,false,X0,X1);
+  rect={x:X0/scale,y:Y0/scale,w:(X1-X0)/scale,h:(Y1-Y0)/scale};
+}
+
+function runScan(){
+  snapGrid(rectIsAuto?0.10:0.22);
+  const g={sx:rect.x*scale,sy:rect.y*scale,cw:rect.w*scale/9,ch:rect.h*scale/9,
+    tmp:document.createElement('canvas'),gc:document.createElement('canvas')};
+  g.tc=g.tmp.getContext('2d',{willReadFrequently:true});
+  g.gc.width=g.gc.height=GL;g.gx=g.gc.getContext('2d',{willReadFrequently:true});
+  const cells=[];for(let i=0;i<81;i++)cells.push(cellGlyph(i,g));
+  const glyphs=[];cells.forEach((c,i)=>{if(c.kind==='glyph')glyphs.push({i,v:c.v});});
+  const cl=clusterGlyphs(glyphs,T_SAME), assign={}, ambig={}, means=cl.map(c=>c.mean());
+  cl.forEach((c,ci)=>c.members.forEach(m=>{assign[m.i]=ci;}));
+  for(const gl of glyphs){const ss=means.map(m=>sim(m,gl.v)).sort((a,b)=>b-a);
+    ambig[gl.i]=ss[0]<T_SAME+0.03||(ss.length>1&&ss[0]-ss[1]<0.04);}
+  scanState={cells,cl,assign,ambig,odd:cells.filter(c=>c.kind==='maybe').length};return scanState;
+}
+$('#doscan').onclick=()=>{
+  if(!img||!rect||rect.w<30||rect.h<30){msg('Drag a box around the grid first.');return;}
+  runScan();showKey();
+};
+
+render();
+</script>
+</body>
+</html>
